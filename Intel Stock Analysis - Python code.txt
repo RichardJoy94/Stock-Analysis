@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
+import statsmodels.api as sm
+import numpy as np
 
 # Download historical stock data for Intel (ticker: INTC)
 ticker_symbol = 'INTC'
@@ -10,37 +12,45 @@ start_date = '2020-01-01'
 end_date = '2024-10-17'
 intel_data = yf.download(ticker_symbol, start=start_date, end=end_date)
 
-# Display the first few rows of the data
-print(intel_data.head())
-
 # Calculate daily returns
 intel_data['Daily_Return'] = intel_data['Close'].pct_change()
 
-# Plot closing prices
-plt.figure(figsize=(10, 5))
+# Calculate Moving Averages
+intel_data['MA20'] = intel_data['Close'].rolling(window=20).mean()
+intel_data['MA50'] = intel_data['Close'].rolling(window=50).mean()
+
+# Calculate Bollinger Bands
+intel_data['20 Day STD'] = intel_data['Close'].rolling(window=20).std()
+intel_data['Upper Band'] = intel_data['MA20'] + (intel_data['20 Day STD'] * 2)
+intel_data['Lower Band'] = intel_data['MA20'] - (intel_data['20 Day STD'] * 2)
+
+# Plot closing prices and Moving Averages
+plt.figure(figsize=(14, 7))
 plt.plot(intel_data['Close'], label='Intel Closing Prices')
-plt.title('Intel Corporation Closing Prices')
+plt.plot(intel_data['MA20'], label='20 Day Moving Average', linestyle='--')
+plt.plot(intel_data['MA50'], label='50 Day Moving Average', linestyle='--')
+plt.fill_between(intel_data.index, intel_data['Upper Band'], intel_data['Lower Band'], color='grey', alpha=0.2, label='Bollinger Bands')
+plt.title('Intel Corporation Stock Analysis')
 plt.xlabel('Date')
 plt.ylabel('Price')
 plt.legend()
 plt.show()
 
-# Simple linear regression to predict future stock values
-X = intel_data.index.values.reshape(-1, 1)
-y = intel_data['Close'].values
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+# ARIMA Model for Forecasting
+intel_data['Close'] = intel_data['Close'].fillna(method='ffill')
+intel_data = intel_data.dropna()
+arima_model = sm.tsa.ARIMA(intel_data['Close'], order=(5, 1, 0))
+arima_result = arima_model.fit(disp=False)
 
-model = LinearRegression()
-model.fit(X_train, y_train)
+# Forecast the next 30 days
+forecast = arima_result.forecast(steps=30)
+forecast_dates = pd.date_range(intel_data.index[-1], periods=30, freq='B')
+forecast_series = pd.Series(forecast[0], index=forecast_dates)
 
-# Predict future stock values
-future_dates = pd.date_range(start_date, periods=30).values.reshape(-1, 1)
-future_prices = model.predict(future_dates)
-
-# Plot predicted future stock values
-plt.figure(figsize=(10, 5))
-plt.plot(intel_data.index, intel_data['Close'], label='Historical Prices')
-plt.plot(future_dates, future_prices, label='Predicted Prices')
+# Plot historical and forecasted data
+plt.figure(figsize=(14, 7))
+plt.plot(intel_data['Close'], label='Historical Prices')
+plt.plot(forecast_series, label='Forecasted Prices', linestyle='--')
 plt.title('Intel Corporation Stock Prediction')
 plt.xlabel('Date')
 plt.ylabel('Price')
